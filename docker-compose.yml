@@ -1,4 +1,5 @@
-version: "3"
+version: '3.8'
+
 services:
   dashboard:
     build: .
@@ -6,5 +7,21 @@ services:
       - "8501:8501"
     env_file:
       - .env
-    volumes:
-      - ./:/app
+    
+    # We still use the command flags to tell Streamlit to auto-reload
+    command: >
+      --server.runOnSave=true
+      --server.fileWatcherType=poll
+      --server.headless=true
+
+    # --- NEW WATCH CONFIGURATION ---
+    develop:
+      watch:
+        # Rule 1: If app.py changes, just copy it to the container (Instant)
+        - action: sync
+          path: ./app.py
+          target: /app/app.py
+        
+        # Rule 2: If requirements.txt changes, rebuild the whole container (Slow but necessary)
+        - action: rebuild
+          path: ./requirements.txt
