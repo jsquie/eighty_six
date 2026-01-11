@@ -65,7 +65,7 @@ def login_form():
         # --- Generate the Google OAuth URL ---
         # dynamic_redirect_url should match your Streamlit app's URL
         # For local dev, this is usually http://localhost:8501
-        redirect_url = "http://qed-eighty-sixed.streamlit.app" 
+        redirect_url = "https://qed-eighty-sixed.streamlit.app" 
         
         data = supabase.auth.sign_in_with_oauth({
             "provider": "google",
@@ -105,9 +105,6 @@ def main_dashboard():
     st.title("QED Coffee - 86d")
 
     st.write(f"Youre logged in as: {st.session_state['user'].user_metadata['name']}")
-
-    def sort_by_items(arg):
-        st.session_state['sort_by_items'] = arg 
 
 
     options_list = ['Location', 'Items', 'Created At', 'Reported By']
