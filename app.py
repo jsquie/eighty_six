@@ -1,13 +1,12 @@
 import streamlit as st
 from supabase import create_client
 import os
-import time
 
 # 1. Config
 st.set_page_config(page_title="86 Items", page_icon="🍔")
 
 # 2. Connect to Supabase
-# In Docker, we read from os.environ, not st.secrets
+# In Docker/Streamlit Cloud, we read from os.environ
 url = os.environ.get("SUPABASE_URL")
 key = os.environ.get("SUPABASE_KEY")
 
@@ -21,75 +20,47 @@ def init_connection():
 
 supabase = init_connection()
 
-# --- 2. Handle Auth Flow ---
-def handle_auth():
-    # Check if we are returning from Google with an auth code
-    # Streamlit now uses st.query_params (replacing experimental_get_query_params)
-    query_params = st.query_params
-    auth_code = query_params.get("code")
-
-    if auth_code:
-        try:
-            # Exchange the code for a session
-            st.write("exchanging for a session")
-            response = supabase.auth.exchange_code_for_session({"auth_code": auth_code})
-            st.session_state["session"] = response.session
-            st.session_state["user"] = response.user
-            
-            # Clear the code from the URL so a refresh doesn't trigger an error
-            st.query_params.clear()
-            st.rerun()
-        except Exception as e:
-            st.error(f"Login failed: {e}")
-
+# --- 2. Authentication Flow (Email + Password) ---
 def login_form():
-    st.title("Streamlit + Supabase OAuth")
+    st.title("Sign In")
+    
+    with st.form("login_form"):
+        email = st.text_input("Email")
+        password = st.text_input("Password", type="password")
+        submit_button = st.form_submit_button("Log In")
 
-    # Run the auth handler at the start of every run
-    handle_auth()
+        if submit_button:
+            try:
+                # Attempt to sign in with email and password
+                response = supabase.auth.sign_in_with_password({
+                    "email": email,
+                    "password": password
+                })
 
-    st.write("I'm here")
-
-    # Check if user is logged in via session state
-    if "session" in st.session_state:
-        user_email = st.session_state["user"].email
-        st.success(f"✅ Logged in as {user_email}")
-        
-        if st.button("Sign out"):
-            supabase.auth.sign_out()
-            st.session_state.clear()
-            st.rerun()
-    else:
-        st.warning("Please log in to continue.")
-        
-        # --- Generate the Google OAuth URL ---
-        # dynamic_redirect_url should match your Streamlit app's URL
-        # For local dev, this is usually http://localhost:8501
-        redirect_url = "https://qed-eighty-sixed.streamlit.app" 
-        
-        data = supabase.auth.sign_in_with_oauth({
-            "provider": "google",
-            "options": {
-                "redirect_to": redirect_url
-            }
-        })
-
-        st.login_button("Sign in with Google", provider="google")
-
+                # If successful, store session and reload
+                st.session_state["session"] = response.session
+                st.session_state["user"] = response.user
+                st.success("Logged in successfully!")
+                st.rerun()
+                
+            except Exception as e:
+                st.error(f"Login failed: {e}")
 
 def logout():
     supabase.auth.sign_out()
-    st.session_state["user"] = None
+    st.session_state.clear()
     st.rerun()
 
-
+# --- 3. Main Application ---
 def main_dashboard():
     user = st.session_state["user"]
 
     st.title("QED Coffee - 86d")
 
-    st.write(f"Youre logged in as: {st.session_state['user'].user_metadata['name']}")
-
+    st.write(f"You're logged in as: {user.email}")
+    
+    if st.button("Sign out"):
+        logout()
 
     options_list = ['Location', 'Items', 'Created At', 'Reported By']
 
@@ -99,29 +70,36 @@ def main_dashboard():
         index=0
     )
 
-
-# 3. Handle 'Restock' Action
+    # Handle 'Restock' Action
     if "mark_stocked" in st.session_state:
         try:
-            supabase.table("Eighty Sixed").update({"resolved": 'True', "resolved_at": "now()", "resolved_by": user.email}).eq("id", st.session_state["mark_stocked"]).execute()
+            supabase.table("Eighty Sixed").update({
+                "resolved": 'True', 
+                "resolved_at": "now()", 
+                "resolved_by": user.email
+            }).eq("id", st.session_state["mark_stocked"]).execute()
+            
             st.success("Item restocked!")
             del st.session_state["mark_stocked"]
         except Exception as e:
             st.error(f"Error: {e}")
 
-# 4. Fetch Data
+    # Fetch Data
+    query = supabase.table("Eighty Sixed").select("*").eq("resolved", 'False')
+    
     if sort_by == "Items":
-        response = supabase.table("Eighty Sixed").select("*").eq("resolved", 'False').order("item_name", desc=True).execute()
+        query = query.order("item_name", desc=True)
     elif sort_by == "Location":
-        response = supabase.table("Eighty Sixed").select("*").eq("resolved", 'False').order("location", desc=True).execute()
+        query = query.order("location", desc=True)
     elif sort_by == "Created At":
-        response = supabase.table("Eighty Sixed").select("*").eq("resolved", 'False').order("created_at", desc=True).execute()
+        query = query.order("created_at", desc=True)
     else:
-        response = supabase.table("Eighty Sixed").select("*").eq("resolved", 'False').order("created_by", desc=True).execute()
-
+        query = query.order("created_by", desc=True)
+        
+    response = query.execute()
     items = response.data
 
-# 5. Display Table
+    # Display Table
     if not items:
         st.info("✅ Everything is in stock!")
     else:
@@ -147,7 +125,7 @@ def main_dashboard():
             c4.button("Restock", key=item['id'], on_click=restock, args=(item['id'],))
             st.divider()
 
-
+# --- Entry Point ---
 if "user" not in st.session_state:
     st.session_state["user"] = None
 
