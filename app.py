@@ -74,24 +74,8 @@ def login_form():
             }
         })
 
-        # Display the "Sign in" link as a button
-        # Note: We use the URL returned by Supabase directly
-        st.markdown(f"""
-            <a href="{data.url}" target="_self">
-                <button style="
-                    background-color: #4285F4;
-                    color: white;
-                    padding: 10px 20px;
-                    border: none;
-                    border-radius: 5px;
-                    cursor: pointer;
-                    font-size: 16px;
-                    font-family: sans-serif;">
-                    Sign in with Google
-                    </button>
-            """,
-            unsafe_allow_html=True
-        )
+        st.login_button("Sign in with Google", provider="google")
+
 
 def logout():
     supabase.auth.sign_out()
