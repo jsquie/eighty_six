@@ -1,3 +1,4 @@
 streamlit
 supabase
 watchdog
+extra-streamlit-components
